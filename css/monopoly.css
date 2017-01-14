@@ -59,7 +59,6 @@ body{
     background-image: url(../images/jail.jpg);
 }
 
-
 .board .game.cell.free-parking{
     background-image: url(../images/parking.png);
 }
@@ -214,11 +213,23 @@ body{
     width: 25%;
     height: 25%;
     margin: 4%;
-    background-color: black;
+    background-color: #364c9c;
     border-radius: 100px;
     opacity:0;
 }
 
 .dice-dot.right{
     margin-left:36%;
+}
+
+.board .player.smile{
+    background-image: url('../images/smile.png');
+    background-size: contain;
+}
+
+.board .player.jailed{
+    background-image: url(../images/sad-face.jpg);
+    background-size: contain;
+    background-repeat: no-repeat;
+    height: 20%;
 }

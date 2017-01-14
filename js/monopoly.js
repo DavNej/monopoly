@@ -1,8 +1,10 @@
 var Monopoly = {};
 Monopoly.allowRoll = true;
-Monopoly.moneyAtStart = 1000;
+Monopoly.moneyAtStart = 11;
 Monopoly.doubleCounter = 0;
+Monopoly.broke = false;
 
+//Inintialize the game
 Monopoly.init = function(){
     $(document).ready(function(){
         Monopoly.adjustBoardSize();
@@ -13,11 +15,12 @@ Monopoly.init = function(){
     });
 };
 
+//shows the first popup (intro)
 Monopoly.start = function(){
     Monopoly.showPopup("intro")
 };
 
-
+//Allow the dice to be rolled
 Monopoly.initDice = function(){
     $(".dice").click(function(){
         if (Monopoly.allowRoll){
@@ -26,25 +29,27 @@ Monopoly.initDice = function(){
     });
 };
 
-
+//returns the current player
 Monopoly.getCurrentPlayer = function(){
     return $(".player.current-turn");
 };
 
+//returns curretn cell of the current player
 Monopoly.getPlayersCell = function(player){
     return player.closest(".cell");
 };
 
-
+//returns the amout of money current player has
 Monopoly.getPlayersMoney = function(player){
     return parseInt(player.attr("data-money"));
 };
+
 
 Monopoly.updatePlayersMoney = function(player,amount){
     var playersMoney = parseInt(player.attr("data-money"));
     playersMoney -= amount;
     if (playersMoney < 0 ){
-        alert("you are broke!")
+        Monopoly.broke = true;
     }
     player.attr("data-money",playersMoney);
     player.attr("title",player.attr("id") + ": $" + playersMoney);
@@ -52,21 +57,55 @@ Monopoly.updatePlayersMoney = function(player,amount){
 };
 
 
+//removes a player if he is broke
+Monopoly.playerIsBroke = function(){
+    Monopoly.broke = false;
+    Monopoly.closePopup();
+    var popup = Monopoly.getPopup("broke");
+    popup.find('.popup-title').text('You are broke');
+    popup.find('#text-placeholder').html("<img src=\"https://media.giphy.com/media/LGLiJjX73jVWo/giphy.gif\" width=\"100%\" height=\"auto\" frameBorder=\"0\"></img>");
+    popup.find('button').unbind('click').bind('click', function(){
+        var brokePlayer = Monopoly.getCurrentPlayer();
+
+        brokePlayer.addClass('lost')
+            .attr("data-money", "")
+            .hide();
+        
+        var properties = $('.property');
+        
+        properties.each(function(){
+            if($(this).hasClass(brokePlayer.attr("id"))){
+                 $(this).removeClass(brokePlayer.attr("id"))
+                    .removeAttr('data-owner')
+                    .removeAttr('data-rent')
+                    .addClass('available');
+            }
+        });
+
+        Monopoly.closeAndNextTurn()
+    });
+    Monopoly.showPopup("broke");
+}
+
+//rolls the dice
 Monopoly.rollDice = function(){
     var result1 = Math.floor(Math.random() * 6) + 1 ;
     var result2 = Math.floor(Math.random() * 6) + 1 ;
     $(".dice").find(".dice-dot").css("opacity",0);
     $(".dice#dice1").attr("data-num",result1).find(".dice-dot.num" + result1).css("opacity",1);
     $(".dice#dice2").attr("data-num",result2).find(".dice-dot.num" + result2).css("opacity",1);
+    //counts double
+    Monopoly.doubleCounter = 0;
     if (result1 == result2){
         Monopoly.doubleCounter++;
     }
+    //move
     var currentPlayer = Monopoly.getCurrentPlayer();
     Monopoly.handleAction(currentPlayer,"move",result1 + result2);
 };
 
-
 Monopoly.movePlayer = function(player,steps){
+    player.removeClass("smile");
     Monopoly.allowRoll = false;
     var playerMovementInterval = setInterval(function(){
         if (steps == 0){
@@ -82,49 +121,76 @@ Monopoly.movePlayer = function(player,steps){
 };
 
 
+//called in movePlayer, handles the turn
 Monopoly.handleTurn = function(){
     var player = Monopoly.getCurrentPlayer();
     var playerCell = Monopoly.getPlayersCell(player);
+    
+    //case player is on its own property
+    if(playerCell.is(".property:not(.available)") && playerCell.hasClass(player.attr("id"))){
+        player.addClass('smile');
+    }
+    //case player can buy
     if (playerCell.is(".available.property")){
         Monopoly.handleBuyProperty(player,playerCell);
-    }else if(playerCell.is(".property:not(.available)") && !playerCell.hasClass(player.attr("id"))){
-         Monopoly.handlePayRent(player,playerCell);
-    }else if(playerCell.is(".go-to-jail")){
+    }
+    //case player must pay rent
+    else if(playerCell.is(".property:not(.available)") && !playerCell.hasClass(player.attr("id"))){
+        Monopoly.handlePayRent(player,playerCell);
+    }
+    //case player goes to jail
+    else if(playerCell.is(".go-to-jail")){
         Monopoly.handleGoToJail(player);
-    }else if(playerCell.is(".chance")){
+    }
+    //case chance card
+    else if(playerCell.is(".chance")){
         Monopoly.handleChanceCard(player);
-    }else if(playerCell.is(".community")){
+    }
+    //case community card
+    else if(playerCell.is(".community")){
         Monopoly.handleCommunityCard(player);
-    }else{
+    }
+    //next turn
+    else{
         Monopoly.setNextPlayerTurn();
     }
 }
 
 Monopoly.setNextPlayerTurn = function(){
-    var currentPlayerTurn = Monopoly.getCurrentPlayer();
-    var playerId = parseInt(currentPlayerTurn.attr("id").replace("player",""));
-    var nextPlayerId = playerId + 1;
-    if (nextPlayerId > $(".player").length){
-        nextPlayerId = 1;
-    }
-    currentPlayerTurn.removeClass("current-turn");
-    var nextPlayer = $(".player#player" + nextPlayerId);
-    nextPlayer.addClass("current-turn");
-    if (nextPlayer.is(".jailed")){
-        var currentJailTime = parseInt(nextPlayer.attr("data-jail-time"));
-        currentJailTime++;
-        nextPlayer.attr("data-jail-time",currentJailTime);
-        if (currentJailTime > 3){
-            nextPlayer.removeClass("jailed");
-            nextPlayer.removeAttr("data-jail-time");
+    if (Monopoly.doubleCounter != 1){
+        //give turn to next player
+        var currentPlayerTurn = Monopoly.getCurrentPlayer();
+        var playerId = parseInt(currentPlayerTurn.attr("id").replace("player",""));
+        var nextPlayerId = playerId + 1;
+
+
+        if (nextPlayerId > $(".player").length){
+            nextPlayerId = 1;
         }
-        Monopoly.setNextPlayerTurn();
-        return;
+        while($('#player' + nextPlayerId).hasClass('lost')){
+            nextPlayerId++;
+        }
+        currentPlayerTurn.removeClass("current-turn");
+        var nextPlayer = $(".player#player" + nextPlayerId);
+
+        nextPlayer.removeClass('smile').addClass("current-turn");
+        
+        //pass 3 turns if player is in jail
+        if (nextPlayer.is(".jailed")){
+            var currentJailTime = parseInt(nextPlayer.attr("data-jail-time"));
+            currentJailTime++;
+            nextPlayer.attr("data-jail-time",currentJailTime);
+            if (currentJailTime > 3){
+                nextPlayer.removeClass("jailed");
+                nextPlayer.removeAttr("data-jail-time");
+            }
+            Monopoly.setNextPlayerTurn();
+            return;
+        }
     }
     Monopoly.closePopup();
     Monopoly.allowRoll = true;
 };
-
 
 Monopoly.handleBuyProperty = function(player,propertyCell){
     var propertyCost = Monopoly.calculateProperyCost(propertyCell);
@@ -149,23 +215,25 @@ Monopoly.handlePayRent = function(player,propertyCell){
     popup.find("#amount-placeholder").text(currentRent);
     popup.find("button").unbind("click").bind("click",function(){
         var properyOwner = $(".player#"+ properyOwnerId);
-        console.log(properyOwnerId)
         Monopoly.updatePlayersMoney(player,currentRent);
         Monopoly.updatePlayersMoney(properyOwner,-1*currentRent);
+        if(Monopoly.broke){
+                Monopoly.playerIsBroke();
+                return;
+        }
         Monopoly.closeAndNextTurn();
     });
    Monopoly.showPopup("pay");
 };
 
-
 Monopoly.handleGoToJail = function(player){
     var popup = Monopoly.getPopup("jail");
     popup.find("button").unbind("click").bind("click",function(){
         Monopoly.handleAction(player,"jail");
+
     });
     Monopoly.showPopup("jail");
 };
-
 
 Monopoly.handleChanceCard = function(player){
     var popup = Monopoly.getPopup("chance");
@@ -180,18 +248,28 @@ Monopoly.handleChanceCard = function(player){
         var currentBtn = $(this);
         var action = currentBtn.attr("data-action");
         var amount = currentBtn.attr("data-amount");
-        console.log("testing the action and amount " + action + " " + amount)
         Monopoly.handleAction(player,action,amount);
     });
     Monopoly.showPopup("chance");
 };
 
 Monopoly.handleCommunityCard = function(player){
-    //TODO: implement this method
-    alert("not implemented yet!")
-    Monopoly.setNextPlayerTurn();
+    var popup = Monopoly.getPopup("community");
+    popup.find(".popup-content").addClass("loading-state");
+    $.get("https://itcmonopoly.appspot.com/get_random_community_card", function(communityJson){
+        popup.find(".popup-content #text-placeholder").text(communityJson["content"]);
+        popup.find(".popup-title").text(communityJson["title"]);
+        popup.find(".popup-content").removeClass("loading-state");
+        popup.find(".popup-content button").attr("data-action",communityJson["action"]).attr("data-amount",communityJson["amount"]);
+    }, "json");
+    popup.find("button").unbind("click").bind("click",function(){
+        var currentBtn = $(this);
+        var action = currentBtn.attr("data-action");
+        var amount = currentBtn.attr("data-amount");
+        Monopoly.handleAction(player,action,amount);
+    });
+    Monopoly.showPopup("community");
 };
-
 
 Monopoly.sendToJail = function(player){
     player.addClass("jailed");
@@ -201,7 +279,6 @@ Monopoly.sendToJail = function(player){
     Monopoly.setNextPlayerTurn();
     Monopoly.closePopup();
 };
-
 
 Monopoly.getPopup = function(popupId){
     return $(".popup-lightbox .popup-page#" + popupId);
@@ -216,17 +293,16 @@ Monopoly.calculateProperyCost = function(propertyCell){
     return cellPrice;
 };
 
-
 Monopoly.calculateProperyRent = function(propertyCost){
     return propertyCost/2;
 };
-
 
 Monopoly.closeAndNextTurn = function(){
     Monopoly.setNextPlayerTurn();
     Monopoly.closePopup();
 };
 
+//Prompts user(s) for the number of players
 Monopoly.initPopups = function(){
     $(".popup-page#intro").find("button").click(function(){
         var numOfPlayers = $(this).closest(".popup-page").find("input").val();
@@ -237,10 +313,10 @@ Monopoly.initPopups = function(){
     });
 };
 
-
 Monopoly.handleBuy = function(player,propertyCell,propertyCost){
     var playersMoney = Monopoly.getPlayersMoney(player)
     if (playersMoney < propertyCost){
+        Monopoly.playSound("no-money");
         Monopoly.showErrorMsg();
     }else{
         Monopoly.updatePlayersMoney(player,propertyCost);
@@ -254,19 +330,17 @@ Monopoly.handleBuy = function(player,propertyCell,propertyCost){
     }
 };
 
-
-
-
-
 Monopoly.handleAction = function(player,action,amount){
-    console.log(action)
     switch(action){
         case "move":
-       	    console.log(amount)
             Monopoly.movePlayer(player,amount);
-             break;
+            break;
         case "pay":
             Monopoly.updatePlayersMoney(player,amount);
+            if(Monopoly.broke){
+                Monopoly.playerIsBroke();
+                return;
+            }
             Monopoly.setNextPlayerTurn();
             break;
         case "jail":
@@ -277,9 +351,7 @@ Monopoly.handleAction = function(player,action,amount){
 };
 
 
-
-
-
+//create players, give them money and place them on GO.
 Monopoly.createPlayers = function(numOfPlayers){
     var startCell = $(".go");
     for (var i=1; i<= numOfPlayers; i++){
@@ -297,30 +369,26 @@ Monopoly.getNextCell = function(cell){
     var currentCellId = parseInt(cell.attr("id").replace("cell",""));
     var nextCellId = currentCellId + 1
     if (nextCellId > 40){
-        console.log("YAY")
         Monopoly.handlePassedGo();
         nextCellId = 1;
     }
     return $(".cell#cell" + nextCellId);
 };
 
-
+//Gives 20 to a user passing GO
 Monopoly.handlePassedGo = function(){
     var player = Monopoly.getCurrentPlayer();
-    Monopoly.updatePlayersMoney(player,Monopoly.moneyAtStart/10);
+    Monopoly.updatePlayersMoney(player,-20);
 };
 
-
+//check if number of players is between 1 and 6
 Monopoly.isValidInput = function(validate,value){
     var isValid = false;
     switch(validate){
         case "numofplayers":
-            if(value > 1 && value <= 4){
+            if(value > 1 && value <= 6){
                 isValid = true;
             }
-            //TODO: remove when done
-            console.log("the val " + value)
-            isValid = true;
             break;
     }
 
@@ -338,16 +406,17 @@ Monopoly.showErrorMsg = function(){
     },2000);
 };
 
-
+//make board responsive
 Monopoly.adjustBoardSize = function(){
     var gameBoard = $(".board");
     var boardSize = Math.min($(window).height(),$(window).width());
     boardSize -= parseInt(gameBoard.css("margin-top")) *2;
     $(".board").css({"height":boardSize,"width":boardSize});
-}
+};
 
+//Fades out current popup
 Monopoly.closePopup = function(){
-    $(".popup-lightbox").fadeOut();
+        $(".popup-lightbox").fadeOut();
 };
 
 Monopoly.playSound = function(sound){
@@ -355,6 +424,7 @@ Monopoly.playSound = function(sound){
     snd.play();
 }
 
+//Handle appearance of popups with a fade in effect
 Monopoly.showPopup = function(popupId){
     $(".popup-lightbox .popup-page").hide();
     $(".popup-lightbox .popup-page#" + popupId).show();
